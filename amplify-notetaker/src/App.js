@@ -3,9 +3,10 @@ import { API, graphqlOperation } from 'aws-amplify';
 import { withAuthenticator } from 'aws-amplify-react';
 
 import { listNotes } from './graphql/queries';
-import { createNote } from './graphql/mutations';
+import { createNote, deleteNote, updateNote } from './graphql/mutations';
 
 const App = (_) => {
+  const [id, setId] = useState();
   const [note, setNote] = useState();
   const [notes, setNotes] = useState([]);
 
@@ -19,14 +20,56 @@ const App = (_) => {
 
   const handleChangeNote = (event) => setNote(event.target.value);
 
+  const hasExistingNote = () => {
+    if (id) {
+      const isNote = notes.findIndex((note) => note.id === id) > -1;
+      return isNote;
+    }
+    return false;
+  };
+
+  const handleUpdateNote = async () => {
+    const input = { id, note };
+    const result = await API.graphql(graphqlOperation(updateNote, { input }));
+    const updatedNote = await result.data.updateNote;
+    const index = notes.findIndex((note) => note.id === updatedNote.id);
+    const updatedNotes = [
+      ...notes.slice(0, index),
+      updatedNote,
+      ...notes.slice(index + 1),
+    ];
+    setId('');
+    setNote('');
+    setNotes(updatedNotes);
+  };
+
   const handleAddNote = async (event) => {
     event.preventDefault();
-    const input = { note };
-    const result = await API.graphql(graphqlOperation(createNote, { input }));
-    const newNote = result.data.createNote;
-    const updatedNotes = [newNote, ...notes];
+
+    // check if we have existing note, if so update it
+    if (hasExistingNote()) {
+      handleUpdateNote();
+    } else {
+      const input = { note };
+      const result = await API.graphql(graphqlOperation(createNote, { input }));
+      const newNote = result.data.createNote;
+      const updatedNotes = [newNote, ...notes];
+      setNotes(updatedNotes);
+      setNote('');
+    }
+  };
+
+  const handleSetNote = ({ note, id }) => {
+    setId(id);
+    setNote(note);
+  };
+
+  const handleDeleteNote = async (id) => {
+    const input = { id };
+    const result = await API.graphql(graphqlOperation(deleteNote, { input }));
+    const deletedNoteId = result.data.deleteNote.id;
+    const updatedNotes = notes.filter((note) => note.id !== deletedNoteId);
     setNotes(updatedNotes);
-    setNote('');
   };
 
   return (
@@ -42,7 +85,7 @@ const App = (_) => {
           value={note}
         />
         <button className="pa2 f4" type="submit">
-          Add Note
+          {id ? 'Update Note' : 'Add Note'}
         </button>
       </form>
 
@@ -51,8 +94,13 @@ const App = (_) => {
         {notes.map((item) => {
           return (
             <div key={item.id} className="flex items-center">
-              <li className="list pa1 f3">{item.note}</li>
-              <button className="bg-transparent bn f4">
+              <li onClick={(_) => handleSetNote(item)} className="list pa1 f3">
+                {item.note}
+              </li>
+              <button
+                onClick={(_) => handleDeleteNote(item.id)}
+                className="bg-transparent bn f4"
+              >
                 <span>&times;</span>
               </button>
             </div>
